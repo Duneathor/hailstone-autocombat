@@ -5,9 +5,10 @@ function M.spawn(t)
   local s = {
     id = t.id, name = t.name or ("mob" .. t.id), hp = t.hp or 100, distance = t.distance or 10, level = t.level or 10,
     named = t.named or false, npc = t.npc ~= false, pc = t.pc or false, con = t.con or "white",
+    class_id = t.class_id or 1,
     x = t.x or 0, y = t.y or 0, z = t.z or 0, max_range = t.max_range or 14, los = t.los,
     mezzed = t.mezzed, slowed = t.slowed, snared = t.snared, rooted = t.rooted, players_near = t.players_near,
-    owned = t.owned, dead = t.dead == true,
+    owned = t.owned, dead = t.dead == true, faction_con = t.faction_con,
   }
   if t.buffs then
     s.has_buff = function(n) return t.buffs[n] ~= nil end
@@ -72,6 +73,7 @@ function M.world(opts)
   end
   function w.path_length(id) return (opts.paths or {})[id] end
   function w.hunt_spawns() return opts.hunt or {} end
+  function w.mob_con(id) return (opts.faction or {})[id] end
   if opts.npcs then function w.npcs() return opts.npcs end end
   return w
 end
@@ -79,6 +81,10 @@ end
 function M.io()
   local io = { lines = {}, used = {}, said = {}, casting_now = false }
   io.cmd = function(line) io.lines[#io.lines + 1] = line end
+  io.consider = function(id, name)
+    io.considered = { id = id, name = name }
+    return true -- silent packet request; no /consider or /target chat commands
+  end
   io.use = function(kind, name)
     io.used[#io.used + 1] = kind .. ":" .. name
     return true

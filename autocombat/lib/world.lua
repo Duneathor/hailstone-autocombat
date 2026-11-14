@@ -36,6 +36,7 @@ local function spawn_table(sp)
     dead = sp.Dead() == true,
     distance = tonumber(sp.Distance()) or 9999,
     level = tonumber(sp.Level()) or 0,
+    class_id = tonumber(sp.Class.ID()) or 0, -- service NPCs must not be hunted (e.g. Innkeep_Harold)
     named = sp.Named() == true,
     npc = sp.Type() == "NPC",
     pc = sp.Type() == "PC",
@@ -228,7 +229,7 @@ local function find_item(name, now)
 end
 
 -- The snapshot. `settings` (repaired) says which assist; `allowed` which modes the server lets run.
-function M.read(settings, allowed)
+function M.read(settings, allowed, faction_lookup)
   local now = mq.gettime()
   local w = { now = now, allowed = allowed or {} }
   w.in_game = mq.TLO.EverQuest.GameState() == "INGAME" and mq.TLO.Me() ~= nil
@@ -246,6 +247,9 @@ function M.read(settings, allowed)
   w.group, w.assist = group_tables(settings)
   w.nav_active = mq.TLO.Navigation.Active() == true
   w.zone = mq.TLO.Zone.ShortName() or ""
+  function w.mob_con(id, name)
+    return faction_lookup and faction_lookup(id, w.zone, w.now, name) or nil
+  end
 
   local spawns = {}
   function w.spawn(id)
@@ -356,6 +360,7 @@ function M.read(settings, allowed)
     end)
     for _, s in ipairs(list) do
       local x = spawn_table(s)
+      x.faction_con = w.mob_con(x.id, x.name)
       for _, p in ipairs(players) do
         local dx, dy = p[1] - x.x, p[2] - x.y
         if dx * dx + dy * dy <= t.player_radius * t.player_radius then x.players_near = true end

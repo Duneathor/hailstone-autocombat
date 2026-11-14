@@ -16,7 +16,34 @@ behind its gear button. It fights for you in one of three modes:
 The compact window opens when the script starts. It has the mode (and Manual's Full or Partial), a Start / Pause
 button, the Burn button, and what Auto Combat is doing, with the last thing it did under it. Drag it by an empty spot; drag its
 bottom-right corner to scale it. The gear opens the settings window, a page list down the left: Spells, Abilities,
-Items, Targeting, Hunter, Assist, Rest, General and Log.
+Items, Targeting (Mob Con and whitelist), Hunter, Assist, Rest, General and Log.
+
+## Targeting: Mob Con and per-zone whitelist
+
+The **Mob Con** section of the **Targeting** settings page filters Hunter's automatic targets by the nine NPC faction standings returned by
+the server's `OP_Consider` reply: Scowling, Threateningly, Dubious, Apprehensive, Indifferent, Amiably, Kindly, Warmly, and Ally.
+This is separate from the grey-through-red **level con colours** on Targeting. The presets are **Select All**
+(the default, preserving existing behaviour), **Hostile Only**, **Hostile + Indifferent**, and **Clear All**.
+Individual standings can also be ticked on or off. Settings are saved per character/server as usual.
+
+When any standing is disabled, Hunter silently requests a faction standing **only for a viable target, before
+moving to or pulling it**, without changing your target or adding a chat line. A bounded 128-entry cache stores
+standings by NPC ID and name for up to 10 minutes, clearing on zone and character changes. Unanswered requests
+are temporarily skipped rather than treating an unknown faction as allowed. The client must grant the script
+`packets` permission to make these silent requests.
+
+At the top of **Targeting**, the **Mob whitelist (current zone)** shows the current zone's saved NPC names.
+Choose an NPC and click **Add Current Target**, or enter a name and click **Add Name**. Each entry has a
+**Remove** button. Names match whole NPC names, case-insensitively; underscores and EQ's three-digit spawn
+suffixes are ignored so entries work across respawns. Only the current zone's entries apply, and they are saved
+with the character's other settings.
+
+**Whitelist entries take priority over ordinary Hunter targets**, even when out of the normal search radius,
+and override level, faction, named, service-NPC, ignore-name, nearby-player, camp leash, and maximum-path
+filters. A whitelisted NPC never needs a faction query. Hunter still requires a live, valid NPC with a
+navigation path and will not select pets or PCs. Mobs already fighting you remain defensive targets regardless
+of the whitelist. In Manual and Assist modes,
+and when a mob is already on your extended target list, these filters do not stop defensive combat.
 
 ## Force and Ignore on the extended target window
 

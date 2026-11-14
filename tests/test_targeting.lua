@@ -59,3 +59,30 @@ case("targeting: hunter includes a living NPC at zero percent, but leaves out co
   eq(list[1] and list[1].id, 9, "zero percent remains a candidate")
   eq(living.hp, 0, "health is not clamped")
 end)
+
+case("targeting: faction consideration is distinct from level con", function()
+  local t = settings.repair({ targeting = { mob_cons = { Amiably = false } } }).targeting
+  check(targeting.allowed(fake.spawn({ id = 8, con = "white", faction_con = "Scowling" }), t), "hostile allowed")
+  check(not targeting.allowed(fake.spawn({ id = 8, con = "white", faction_con = "Amiably" }), t), "friendly excluded")
+  check(targeting.allowed(fake.spawn({ id = 8, con = "white" }), t), "unknown awaits an active /consider")
+  check(not targeting.allowed(fake.spawn({ id = 8, con = "grey", faction_con = "Scowling" }), t), "level filter still applies")
+end)
+
+case("targeting: Hunter excludes service NPCs and innkeepers regardless of faction", function()
+  local t = settings.defaults().targeting -- all faction standings selected
+  for _, class in ipairs({ 20, 35, 40, 41, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68, 69, 70, 71, 72, 73, 74 }) do
+    check(not targeting.allowed(fake.spawn({ id = 55, name = "A merchant", class_id = class,
+      faction_con = "Scowling" }), t), "service class " .. class .. " excluded")
+  end
+  check(not targeting.allowed(fake.spawn({ id = 56, name = "Innkeep_Harold000", class_id = 1,
+    faction_con = "Scowling" }), t), "innkeeper with non-service class excluded")
+  check(targeting.allowed(fake.spawn({ id = 57, name = "a_fire_beetle005", class_id = 1,
+    faction_con = "Scowling" }), t), "ordinary hostile NPC allowed")
+  local h = settings.defaults().hunter
+  local list = targeting.hunt_candidates({
+    fake.spawn({ id = 55, name = "Innkeep_Harold000", x = 10, class_id = 41 }),
+    fake.spawn({ id = 57, name = "a_fire_beetle005", x = 20 }),
+  }, t, h, { 0, 0, 0 }, {}, false)
+  eq(#list, 1, "service NPC omitted from navigation candidates")
+  eq(list[1].id, 57, "Hunter chooses beetle instead of innkeeper")
+end)

@@ -29,6 +29,8 @@ local settings_mod = require('lib.settings')
 local engine = require('lib.engine')
 local world_mod = require('lib.world')
 local rules = require('lib.rules')
+local mobcon = require('lib.mobcon')
+local whitelist = require('lib.whitelist')
 
 local NAME = "autocombat"
 local TICK_MS = 100
@@ -43,6 +45,8 @@ local E = engine.new()
 local held = false                  -- autoskill held
 local row_status = { spells = {}, abilities = {}, items = {} }
 local spell_cache = nil
+local con_cache = mobcon.new() -- bounded, per-zone faction results from OP_Consider packets
+local can_read_consider = false
 
 local function say(text) hs.chat('[Auto Combat] ' .. text, 15) end
 
@@ -61,6 +65,8 @@ local function load_settings()
   local path = settings_path()
   if not path or path == loaded_for then return end
   loaded_for = path
+  mobcon.set_zone(con_cache, nil) -- the same zone's spawn IDs may belong to another character
+  E.consider = nil
   local chunk = loadfile(path)
   local ok, t = false, nil
   if chunk then ok, t = pcall(chunk) end
@@ -100,6 +106,17 @@ local act = {
   delay = function(ms, fn) mq.delay(ms, fn) end,
   casting = function() return mq.TLO.Me.Casting() ~= nil end,
   say = say,
+  consider = function(id, name)
+    if not can_read_consider then return false end
+    local player = hs.player()
+    local data = mobcon.request(con_cache, id, name, mq.gettime(), player and player.spawn_id)
+    if not data then return false end
+    -- Send OP_Consider directly for this NPC. Do not change the visible target
+    -- or print the server's response to the chat window.
+    local ok = pcall(hs.send_packet, 'zone', mobcon.OPCODE, data)
+    if not ok then mobcon.cancel(con_cache, true) end
+    return ok
+  end,
 }
 
 local function start()
@@ -115,6 +132,7 @@ end
 
 local function pause(why)
   if E.running then engine.pause(E, act, why) end
+  mobcon.cancel(con_cache)
   if not why then say("paused.") end
 end
 
@@ -268,6 +286,12 @@ hs.ui_function("state", function()
     allowed = allowed(),
     rows = row_status,
     character = loaded_for ~= nil,
+    zone = whitelist.zone(mq.TLO.Zone.ShortName()) or "",
+    target_name = (function()
+      local t = mq.TLO.Target
+      if (tonumber(t.ID()) or 0) <= 0 or t.Type() ~= "NPC" then return nil end
+      return t.CleanName() or t.Name()
+    end)(),
   }
 end)
 hs.ui_function("settings", function() load_settings() return S end)
@@ -306,6 +330,35 @@ hs.ui_function("set_rows", function(list, rows)
   S = settings_mod.repair(S)
   changed()
   return true
+end)
+-- The whitelist is kept per zone and per character. Only NPC targets can
+-- be added using the button; manual entries are validated by lib/whitelist.
+hs.ui_function("whitelist", function(action, name)
+  load_settings()
+  if mq.TLO.EverQuest.GameState() ~= "INGAME" then return false end
+  local zone = whitelist.zone(mq.TLO.Zone.ShortName())
+  if not zone then return false end
+  if action == "add_target" then
+    local t = mq.TLO.Target
+    if (tonumber(t.ID()) or 0) <= 0 or t.Type() ~= "NPC" then return false end
+    name = t.CleanName() or t.Name()
+    action = "add"
+  end
+  local modified = false
+  if action == "add" then modified = whitelist.add(S.targeting.whitelist, zone, name)
+  elseif action == "remove" then modified = whitelist.remove(S.targeting.whitelist, zone, name)
+  end
+  if modified then
+    -- A new priority target should be considered on the next Hunter look.
+    if E.hunt and not E.hunt.pulled then
+      E.hunt = nil
+      if E.nav == "mob" then act.cmd('/nav stop') E.nav = nil end
+    end
+    E.consider, E.last_look = nil, -1e9
+    S = settings_mod.repair(S)
+    changed()
+  end
+  return modified
 end)
 hs.ui_function("set_ignore", function(list)
   S.targeting.ignore = list or {}
@@ -371,6 +424,12 @@ mq.bind('/autocombat', function(a, b)
   end
 end)
 
+-- Intercept only our own OP_Consider replies before the client converts
+-- them into chat. Manual /consider replies pass through unchanged.
+can_read_consider = pcall(hs.on_packet, 'zone', 'in', mobcon.OPCODE, function(opcode, data)
+  return mobcon.record_packet(con_cache, opcode, data, mq.gettime())
+end)
+
 -- ---------------------------------------------------------------- the loop
 
 local last_status = -1e9
@@ -384,7 +443,11 @@ while true do
   local list, hater_ids = xtargets()
   xt_list = list
   engine.update_marks(E, hater_ids, world_mod.alive, act)
-  local w = E.running and world_mod.read(S, allowed()) or nil
+  local w = E.running and world_mod.read(S, allowed(), function(id, zone, now, name)
+    mobcon.set_zone(con_cache, zone)
+    return mobcon.lookup(con_cache, id, now, name)
+  end) or nil
+  if w and w.in_game then mobcon.set_zone(con_cache, w.zone) end
   if E.burn and engine.burn_tick(E, w and #w.haters or world_mod.hater_count(), act) then
     say("burn over: the extended target list is clear.")
   end

@@ -20,7 +20,7 @@ local function client(spawns, xtargets, target_id)
   local function spawn(s)
     return value({ ID = s.id, Name = s.name or ("mob" .. s.id), CleanName = s.name or ("mob" .. s.id),
       Type = s.kind or "NPC", PctHPs = s.hp, Dead = s.dead == true, Distance = s.distance or 10,
-      Distance3D = s.distance or 10, Level = 10, ConColor = "WHITE", X = s.x or 0, Y = s.y or 0, Z = s.z or 0,
+      Distance3D = s.distance or 10, Level = 10, Class = value({ ID = s.class or 1 }), ConColor = "WHITE", X = s.x or 0, Y = s.y or 0, Z = s.z or 0,
       Surname = s.surname, BodyType = s.body or 1, Targetable = s.targetable ~= false,
       MaxRangeTo = 14, LineOfSight = true, BuffsPopulated = false })
   end
