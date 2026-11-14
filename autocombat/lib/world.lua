@@ -65,10 +65,11 @@ local function spawn_by_id(id)
   return spawn_table(sp)
 end
 
--- HP is a whole percentage: a living NPC can still report 0. Only death or a missing spawn ends its life.
+-- HP is a whole percentage: a living NPC can still report 0. Only death or a missing spawn ends its life. An NPC's
+-- pet reports Type "Pet", so only players are left out, not everything but "NPC".
 function M.alive(id)
   local sp = mq.TLO.Spawn('id ' .. id)
-  return sp() ~= nil and sp.Type() == "NPC" and sp.Dead() ~= true
+  return sp() ~= nil and sp.Dead() ~= true and sp.Type() ~= "PC"
 end
 
 -- The player.
@@ -105,7 +106,7 @@ local function haters()
     local x = hs.xtarget(i)
     if x and x.type == 1 and (x.spawn_id or 0) ~= 0 then
       local s = spawn_by_id(x.spawn_id)
-      if s and s.npc and not s.dead then out[#out + 1] = s end
+      if s and not s.dead and not s.pc then out[#out + 1] = s end
     end
   end
   return out

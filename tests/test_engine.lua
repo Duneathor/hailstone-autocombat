@@ -462,3 +462,10 @@ case("engine: a pending hunt survives zero percent and is replaced after despawn
   engine.tick(e, gone, s, io)
   check(io.has("/nav id 10 distance=10"), "walks to the replacement")
 end)
+
+case("engine: an NPC's pet on you is fought, even at zero percent", function()
+  local s, e, io = setup({})
+  local pet = fake.spawn({ id = 30, name = "a gnoll's warder", npc = false, hp = 0 })
+  engine.tick(e, fake.world({ haters = { pet } }), s, io)
+  check(io.has("/target id 30"), "targets the pet on us")
+end)

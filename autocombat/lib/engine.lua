@@ -233,8 +233,10 @@ local function hater_ids(world)
   return ids
 end
 
+-- Alive while it exists and is not a corpse: HP is a whole percentage, so a living mob can show 0. Not limited to
+-- Type "NPC": an NPC's pet (Type "Pet") on the extended target list is fought too.
 local function alive(spawn)
-  return spawn and spawn.npc and not spawn.dead
+  return spawn ~= nil and not spawn.dead and not spawn.pc
 end
 
 -- The mob to fight now, or nil. Full and Hunter fight only what is on the extended target list (the mobs on me) and
@@ -250,7 +252,7 @@ local function fight_target(e, world, s)
   local haters = hater_ids(world)
   local pt = world.target
   if pt and ignored[pt.id] then pt = nil end
-  local player_fights = alive(pt) and not pt.owned and (haters[pt.id] or world.me.combat)
+  local player_fights = alive(pt) and pt.npc and not pt.owned and (haters[pt.id] or world.me.combat)
   if s.mode == "manual" and s.style == "partial" then
     -- You choose: the NPC you target, once it is on you or you attack it.
     return player_fights and pt or nil
@@ -262,7 +264,7 @@ local function fight_target(e, world, s)
       local f = world.spawn(e.fight_id)
       if alive(f) then return f end
     end
-    if a and alive(pt) and not pt.owned and pt.id ~= a.id
+    if a and alive(pt) and pt.npc and not pt.owned and pt.id ~= a.id
         and (pt.hp or 100) <= s.assist.engage_pct then
       return pt
     end
