@@ -190,7 +190,8 @@ health falls below the mark you set on the Rest page, or when the server does no
 
 Auto Combat is an ordinary player script, so your `hailstone.cfg` decides whether it runs at all
 (`[scripts] player = on` and the capabilities in `player_caps`). It needs `read`, `commands` (for its `/autocombat`
-command and `/pet`), `target`, `actions`, `move` and `ui`.
+command and `/pet`), `target`, `actions`, `move` and `ui`, and `packets` for the Mob Con faction filter (without
+it, Hunter skips every mob whose standing it would have to ask for while any standing is unticked).
 
 You can also turn single modes off:
 
