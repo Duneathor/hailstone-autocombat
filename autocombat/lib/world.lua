@@ -33,7 +33,7 @@ local function spawn_table(sp)
     id = sp.ID(),
     name = sp.CleanName() or sp.Name() or "?",
     hp = pct(sp.PctHPs()),
-    dead = sp.Dead() == true,
+    dead = sp.Dead() == true or sp.Type() == "Corpse", -- Type too, for a client without Spawn.Dead
     distance = tonumber(sp.Distance()) or 9999,
     level = tonumber(sp.Level()) or 0,
     class_id = tonumber(sp.Class.ID()) or 0, -- service NPCs must not be hunted (e.g. Innkeep_Harold)
@@ -70,7 +70,8 @@ end
 -- pet reports Type "Pet", so only players are left out, not everything but "NPC".
 function M.alive(id)
   local sp = mq.TLO.Spawn('id ' .. id)
-  return sp() ~= nil and sp.Dead() ~= true and sp.Type() ~= "PC"
+  local kind = sp.Type()
+  return sp() ~= nil and sp.Dead() ~= true and kind ~= "PC" and kind ~= "Corpse"
 end
 
 -- The player.

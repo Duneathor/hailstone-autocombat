@@ -98,6 +98,14 @@ case("world: zero percent stays on the hater list until death or despawn", funct
   eq(e.force_id, 0, "corpse clears force even if extended target slot remains")
 end)
 
+case("world: a corpse is dead even where the client has no Spawn.Dead", function()
+  local _, world = client({ { id = 30, hp = 50, kind = "Corpse" } }, { { type = 1, spawn_id = 30 } }, 30)
+  local w = world.read(settings.defaults())
+  eq(w.spawn(30).dead, true, "Type Corpse is death")
+  eq(#w.haters, 0, "not a hater")
+  check(not world.alive(30), "not alive for marks")
+end)
+
 case("world: an NPC's pet on the extended target list is a hater and alive", function()
   local _, world = client({ { id = 20, hp = 0, kind = "Pet" } }, { { type = 1, spawn_id = 20 } }, 20)
   local w = world.read(settings.defaults())
