@@ -1,6 +1,7 @@
 -- Auto Combat: the settings, their defaults, and the repair of a loaded file (a missing or wrong-typed value takes
 -- its default, numbers are clamped, rows and conditions that make no sense are dropped). Pure.
 local catalog = require('lib.catalog')
+local whitelist = require('lib.whitelist')
 
 local M = {}
 
@@ -11,6 +12,8 @@ M.STYLES = { "full", "partial" }
 M.HUNT_STYLES = { "roam", "camp" }
 M.PRIORITIES = { "lowest_hp", "highest_hp", "closest", "named_first" }
 M.CONS = { "grey", "green", "lightblue", "blue", "white", "yellow", "red" }
+M.MOB_CONS = { "Scowling", "Threateningly", "Dubious", "Apprehensive", "Indifferent",
+  "Amiably", "Kindly", "Warmly", "Ally" }
 
 function M.defaults()
   return {
@@ -31,7 +34,10 @@ function M.defaults()
       min_level = 0,              -- 0: any
       max_level = 0,
       cons = { grey = false, green = true, lightblue = true, blue = true, white = true, yellow = true, red = false },
+      mob_cons = { Scowling = true, Threateningly = true, Dubious = true, Apprehensive = true,
+        Indifferent = true, Amiably = true, Kindly = true, Warmly = true, Ally = true },
       named = true,               -- named mobs may be chosen
+      whitelist = {},             -- zone short name -> NPC names that override Hunter filters
       ignore = {},                -- names (or parts of names) never chosen
       radius = 200,               -- hunter: how far it looks
       zradius = 50,
@@ -206,6 +212,8 @@ function M.repair(given)
     out.rest[k] = number(out.rest[k], d.rest[k], 0, 100)
   end
   out.general.action_gap = number(out.general.action_gap, d.general.action_gap, 0.1, 5)
+  -- Zone-specific whitelist is a dynamic map, so the shape-based fill cannot copy it.
+  out.targeting.whitelist = whitelist.repair(given.targeting and given.targeting.whitelist)
   -- Lists and the camp (not in the defaults' shape).
   out.targeting.ignore = {}
   local ign = given.targeting and given.targeting.ignore

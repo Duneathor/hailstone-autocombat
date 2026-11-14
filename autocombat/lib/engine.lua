@@ -10,6 +10,8 @@
 -- }
 local rules = require('lib.rules')
 local targeting = require('lib.targeting')
+local mobcon = require('lib.mobcon')
+local whitelist = require('lib.whitelist')
 
 local M = {}
 
@@ -27,6 +29,7 @@ function M.new()
     fight_id = 0,        -- the mob being fought
     engage_id = 0,       -- hunter: the mob walked to (fought once in reach, before it is on me)
     hunt = nil,          -- hunter: { id, since, pulled }
+    consider = nil,      -- hunter: { id, zone, sent } silent packet pending for a candidate
     skip = {},           -- hunter: id -> until (ms)
     stick_id = 0,        -- the spawn /stick was given
     nav = nil,           -- what /nav was sent to ("camp", "mob", "assist")
@@ -74,6 +77,7 @@ function M.pause(e, io, why)
   e.attack_on, e.pet_out = false, false
   e.pet_sent = {}
   e.fight_id, e.engage_id, e.hunt, e.look_why = 0, 0, nil, nil
+  e.consider = nil
   e.status = "Paused"
   note(e, why or "Paused", io)
   if why then io.say("Auto Combat: " .. why) end
@@ -399,8 +403,45 @@ local function pull_range(world, s)
   return 0
 end
 
+-- Query only a viable Hunter candidate, without changing the player's target.
+-- The packet hook fills the cache when the server replies; the next look can
+-- use it. Never walk to a mob whose standing is still unknown.
+local function consider_candidate(e, world, m, io)
+  local p = e.consider
+  if not p or p.id ~= m.id or p.zone ~= world.zone then
+    p = { id = m.id, zone = world.zone }
+    e.consider = p
+  end
+  if not p.sent then
+    if io.consider(m.id, m.name) == false then
+      e.skip[m.id], e.consider = world.now + NO_PATH_MS, nil
+      note(e, "Cannot query faction of " .. (m.name or "?") .. "; skipping for now", io)
+      return true
+    end
+    p.sent = world.now
+    e.status = "Checking faction of " .. (m.name or "?")
+    return true
+  end
+  if world.now - p.sent < 1500 then
+    e.status = "Waiting for faction of " .. (m.name or "?")
+    return true
+  end
+  e.skip[m.id], e.consider = world.now + NO_PATH_MS, nil
+  note(e, "No faction reply from " .. (m.name or "?") .. "; skipping for now", io)
+  return true
+end
+
 local function hunt(e, world, s, io)
   local h = s.hunter
+  local check_con = mobcon.restricted(s.targeting.mob_cons)
+  if not check_con then e.consider = nil end
+  if mobcon.none_enabled(s.targeting.mob_cons)
+      and not (s.targeting.whitelist and s.targeting.whitelist[whitelist.zone(world.zone) or ""]) then
+    if e.nav == "mob" then io.cmd('/nav stop') e.nav = nil end
+    e.hunt, e.consider = nil, nil
+    e.status = "Mob Con: no faction standings selected"
+    return
+  end
   if #world.haters >= h.max_haters and h.max_haters > 0 then return end
   -- A camp set in another zone does not count here.
   local camp = h.style == "camp" and h.camp and h.camp.zone == world.zone and { h.camp.x, h.camp.y, h.camp.z } or nil
@@ -408,8 +449,20 @@ local function hunt(e, world, s, io)
   -- Walking to one: give up after a while; in reach, pull it (camp) or engage it (roam).
   if e.hunt then
     local m = world.spawn(e.hunt.id)
-    if not m or (m.hp or 0) <= 0 then
+    if not m or m.npc == false or m.owned or (m.hp or 0) <= 0 then
       e.hunt = nil
+      if e.nav == 'mob' then io.cmd('/nav stop') e.nav = nil end
+    elseif not e.hunt.pulled and not targeting.allowed(m, s.targeting, world.zone) then
+      -- Recheck on every tick: a changed filter or a newly identified service
+      -- NPC must not remain a /nav destination after it was selected.
+      e.hunt = nil
+      if e.nav == "mob" then io.cmd('/nav stop') e.nav = nil end
+    elseif check_con and not e.hunt.pulled and not whitelist.contains(s.targeting.whitelist, world.zone, m.name)
+        and world.mob_con
+        and (not world.mob_con(m.id, m.name) or s.targeting.mob_cons[world.mob_con(m.id, m.name)] == false) then
+      -- If the filter was enabled/changed mid-walk, verify the standing first.
+      e.hunt = nil
+      if e.nav then io.cmd('/nav stop') e.nav = nil end
     elseif world.now - e.hunt.since > h.give_up * 1000 then
       e.skip[e.hunt.id] = world.now + SKIP_MS
       note(e, "Gave up on " .. (m.name or "?"), io)
@@ -475,11 +528,11 @@ local function hunt(e, world, s, io)
   end
   local from = camp or { me.x, me.y, me.z }
   local all = world.hunt_spawns()
-  local list, filtered = targeting.hunt_candidates(all, s.targeting, h, from, e.skip, camp ~= nil)
+  local list, filtered = targeting.hunt_candidates(all, s.targeting, h, from, e.skip, camp ~= nil, false, world.zone)
   -- Roam: nothing within the search radius, so anywhere in the zone, nearest first, however long the walk.
   local wide = false
   if #list == 0 and not camp then
-    list = targeting.hunt_candidates(all, s.targeting, h, from, e.skip, false, true)
+    list = targeting.hunt_candidates(all, s.targeting, h, from, e.skip, false, true, world.zone)
     wide = true
   end
   local mesh = world.mesh or { loaded = true, complete = true }
@@ -487,7 +540,10 @@ local function hunt(e, world, s, io)
   for n = 1, math.min(#list, 5) do
     local m = list[n]
     local len = world.path_length(m.id)
-    if len and len >= 0 and (wide or len <= h.max_path) then
+    if len and len >= 0 and (m.whitelisted or wide or len <= h.max_path) then
+      if check_con and not m.whitelisted and not m.faction_con
+          and consider_candidate(e, world, m, io) then return end
+      e.consider = nil
       e.hunt = { id = m.id, since = world.now }
       e.look_why = nil
       note(e, "Hunting " .. (m.name or "?"), io)

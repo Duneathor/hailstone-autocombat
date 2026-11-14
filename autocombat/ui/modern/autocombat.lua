@@ -1,6 +1,6 @@
 -- Auto Combat's windows for the Modern pack. The script (../../init.lua) keeps the settings and runs the fight; these
 -- show its state and edit the settings through the script's functions (eq.Plugin("autocombat"): state, settings,
--- set, set_rows, set_ignore, command, catalog, row_for_spell, clickies, row_for_item).
+-- set, set_rows, set_ignore, whitelist, command, catalog, row_for_spell, clickies, row_for_item).
 --   The compact window (opens with the script; /autocombat, or the EQ menu's Plugins > Auto Combat): the mode (Manual,
 --           Hunter, Assist; one the server turned off is greyed) and Manual's style (Full, Partial), Start / Pause,
 --           what it is doing and the last thing it did. Its gear opens the settings.
@@ -13,7 +13,7 @@
 --           eq.AbilityBook) as icon tiles, with a search and filters.
 --     Items: the same for the items carried with a click effect (worn or in a bag), picked from the ones the script
 --           finds (clickies); a tile shows the item's icon, the card its click spell, cast, recast and when it is ready.
---     Targeting, Hunter, Assist, Rest, General: the other settings. Log: the last things it did.
+--     Targeting (including Mob Con and zone whitelist), Hunter, Assist, Rest, General; Log: last actions.
 local hud = dofile("lib/hud.lua")
 local K = dofile("lib/dialogs_kit.lua")
 local T = hud.T
@@ -27,12 +27,15 @@ local rev = -1
 local cat = nil                  -- the conditions' catalog
 local sel = { spells = nil, abilities = nil, items = nil } -- the selected row of each page
 local imported = {}               -- the last import's count, by page
+local whitelist_text = ""            -- the unsubmitted manual NPC name
 local describe                   -- a condition as words (below)
 
 local MODES = { { "manual", "Manual" }, { "hunter", "Hunter" }, { "assist", "Assist" } }
 local STYLES = { { "full", "Full" }, { "partial", "Partial" } }
 local PRIORITIES = { { "lowest_hp", "Lowest health" }, { "highest_hp", "Highest health" }, { "closest", "Closest" },
   { "named_first", "Named first" } }
+local MOB_CONS = { "Scowling", "Threateningly", "Dubious", "Apprehensive", "Indifferent",
+  "Amiably", "Kindly", "Warmly", "Ally" }
 local CONS = { { "grey", "Grey" }, { "green", "Green" }, { "lightblue", "Light blue" }, { "blue", "Blue" },
   { "white", "White" }, { "yellow", "Yellow" }, { "red", "Red" } }
 
@@ -805,9 +808,46 @@ end
 
 -- ---------------------------------------------------------------- the other pages
 
+local mobConPage  -- defined below; Targeting incorporates this section
+local function whitelistEditor(s)
+  section("Mob whitelist (current zone)", s, true)
+  local zone = st.zone or ""
+  if zone == "" then
+    note("Enter the game to edit the whitelist for the current zone.")
+    return
+  end
+  note("Zone: " .. zone .. ". Names here always take priority over the usual Hunter filters. " ..
+    "Matches are case-insensitive, per zone; EQ spawn suffixes (three digits) are ignored.")
+  ui.Dummy(0, 5 * s)
+  local current = st.target_name
+  if not current or current == "" then ui.BeginDisabled(true) end
+  if ui.Button("Add Current Target##acwhitecurrent") and P then P.whitelist("add_target") end
+  if not current or current == "" then ui.EndDisabled() end
+  ui.SameLine()
+  ui.TextDisabled(current and ("NPC: " .. current) or "Select an NPC first")
+  ui.SetNextItemWidth(260 * s)
+  local typed, changed = ui.InputTextWithHint("##acwhitename", "Mob name", whitelist_text, 128)
+  if changed then whitelist_text = typed end
+  ui.SameLine()
+  if ui.Button("Add Name##acwhitemanual") and P then
+    if P.whitelist("add", whitelist_text) then whitelist_text = "" end
+  end
+  local list = (S.targeting.whitelist or {})[zone] or {}
+  if #list == 0 then
+    note("No whitelisted mobs in this zone.")
+  else
+    for i, name in ipairs(list) do
+      ui.Text(name)
+      ui.SameLine()
+      if ui.Button("Remove##acwhiteremove" .. i) and P then P.whitelist("remove", name) end
+    end
+  end
+end
+
 local function targetingPage(s)
   local t = S.targeting
-  section("Who to fight first", s, true)
+  whitelistEditor(s)
+  section("Who to fight first", s)
   field("When several mobs are on you, fight", s)
   local p = combo("##acprio", PRIORITIES, t.priority, 180 * s)
   if p then set("targeting.priority", p) end
@@ -842,6 +882,42 @@ local function targetingPage(s)
   end
   ui.Dummy(0, 4 * s)
   note("These choose the mobs Hunter goes after. Mobs already fighting you are fought whatever they are.")
+  mobConPage(s)
+end
+
+
+local MOB_CON_PRESETS = {
+  { "all", "Select All" }, { "hostile", "Hostile Only" },
+  { "indifferent", "Hostile + Indifferent" }, { "none", "Clear All" },
+}
+
+mobConPage = function(s)
+  local filters = S.targeting.mob_cons
+  section("Faction considerations for Hunter", s)
+  note("Choose which faction standings Hunter may approach or pull (separate from the level con colours above). " ..
+    "Whitelisted mobs bypass these settings; mobs already attacking you are always defended against.")
+  ui.Dummy(0, 8 * s)
+  for i, preset in ipairs(MOB_CON_PRESETS) do
+    if i > 1 then ui.SameLine() end
+    if ui.Button(preset[2] .. "##acmobcon" .. preset[1]) then
+      for _, tier in ipairs(MOB_CONS) do
+        local enabled = preset[1] == "all" or (preset[1] == "hostile" or preset[1] == "indifferent")
+          and (tier == "Scowling" or tier == "Threateningly" or tier == "Dubious" or tier == "Apprehensive"
+            or (preset[1] == "indifferent" and tier == "Indifferent"))
+        set("targeting.mob_cons." .. tier, enabled)
+      end
+    end
+  end
+  section("Allowed faction standings", s)
+  for i, tier in ipairs(MOB_CONS) do
+    if (i - 1) % 3 ~= 0 then ui.SameLine() end
+    local v = check(tier .. "##acmobcon" .. tier, filters[tier])
+    if v ~= nil then set("targeting.mob_cons." .. tier, v) end
+  end
+  ui.Dummy(0, 8 * s)
+  note("When a standing is disabled, Hunter requests faction silently for eligible NPCs before travelling or pulling. " ..
+    "Non-whitelisted merchants, innkeepers and other service NPCs are excluded. Unknown standings are skipped when no reply " ..
+    "arrives. Results are cached by spawn for this zone.")
 end
 
 local function hunterPage(s)
@@ -1272,7 +1348,7 @@ local PAGES = {
   { "spells", "Spells", "Ordered rows: the first one that is ready and whose conditions all hold fires." },
   { "abilities", "Abilities", "Skills, combat abilities and alternate abilities, in the same way as spells." },
   { "items", "Items", "Items you carry with a click effect (worn or in your bags), in the same way as spells." },
-  { "targeting", "Targeting", "Which mobs it fights first, and which it may go after." },
+  { "targeting", "Targeting", "Level con, faction con, ignores, and per-zone priority whitelist." },
   { "hunter", "Hunter", "Finding mobs on its own: roaming the zone, or pulling to a camp." },
   { "assist", "Assist", "Fighting what your assist fights." },
   { "rest", "Rest", "Sitting between fights, and when to stop." },

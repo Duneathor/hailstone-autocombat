@@ -28,7 +28,7 @@ function case(name, fn)
   end
 end
 
-for _, file in ipairs({ "test_settings", "test_conditions", "test_rules", "test_targeting", "test_engine" }) do
+for _, file in ipairs({ "test_settings", "test_conditions", "test_rules", "test_targeting", "test_engine", "test_mobcon", "test_whitelist" }) do
   require(file)
 end
 

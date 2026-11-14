@@ -128,3 +128,13 @@ case("settings: Items rows are kept; a starting row for a click item comes from 
   eq(r.conditions[1].value, "Flaming Sword of Xuzl", "when I lack the spell's buff")
   eq(settings.repair({ hunter = { pull_kind = "item", pull_name = "x" } }).hunter.pull_kind, "", "no item pulls yet")
 end)
+
+case("settings: Mob Con defaults allow all and repaired settings preserve exclusions", function()
+  local defaults = settings.defaults().targeting.mob_cons
+  for _, tier in ipairs(settings.MOB_CONS) do eq(defaults[tier], true, tier .. " enabled by default") end
+  local s = settings.repair({ targeting = { mob_cons = { Ally = false, Scowling = "off" } } })
+  eq(s.targeting.mob_cons.Ally, false, "saved exclusion")
+  eq(s.targeting.mob_cons.Scowling, true, "wrong type repaired")
+  s = settings.set(s, "targeting.mob_cons.Threateningly", false)
+  eq(s.targeting.mob_cons.Threateningly, false, "individual toggle persists")
+end)
