@@ -30,8 +30,9 @@ When any standing is disabled, Hunter silently requests a faction standing **onl
 moving to or pulling it**, without changing your target or adding a chat line. A bounded 128-entry cache stores
 standings by NPC ID and name for up to 10 minutes, clearing on zone and character changes. Unanswered requests
 are temporarily skipped rather than treating an unknown faction as allowed. The client must grant the script
-`packets` permission to make these silent requests. Project Triune's faction values 6–9 are decoded
-as Scowling, Threateningly, Dubious and Apprehensive respectively (not the vanilla EQ string-table order).
+`packets` permission to make these silent requests. The reply's faction values 6–9 are
+Scowling, Threateningly, Dubious and Apprehensive, as the server sends them (earlier versions read them the
+other way round).
 Three additional Triune con-immunity notices (charm, mez and slow immunity) are suppressed only during a
 six-second window following an Autocombat-issued request. Their exact raw text is checked across incoming zone
 packet types, since Triune can use different chat packets and target IDs. Other chat and manual `/consider`

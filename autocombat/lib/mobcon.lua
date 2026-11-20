@@ -13,9 +13,11 @@ M.NOTICE_MS = 6000 -- allow for Triune notices delayed after the consideration r
 M.TIERS = { "Scowling", "Threateningly", "Dubious", "Apprehensive", "Indifferent",
   "Amiably", "Kindly", "Warmly", "Ally" }
 
--- Project Triune's RoF2 faction values 6..9 do NOT follow the client
--- eqstr 12212..12220 ordering. In particular, 6 is Scowling and 9 is
--- Apprehensive. Never infer wire ordering from the UI tier list.
+-- OP_Consider's faction field on the wire follows eqstr 12212..12220
+-- (1=ally .. 6=scowls, 7=threateningly, 8=dubiously, 9=apprehensively).
+-- EQEmu's FACTION_VALUE enum puts 6..9 the other way round and swaps them
+-- just before sending (Client::Handle_OP_Consider), so every EQEmu server
+-- sends this order. Never infer it from the UI tier list above.
 local WIRE_TIERS = { "Ally", "Warmly", "Kindly", "Amiably", "Indifferent",
   "Scowling", "Threateningly", "Dubious", "Apprehensive" }
 
